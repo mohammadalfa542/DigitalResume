@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tic-Tac-Toe — Login/Signup & Play</title>
+<style>
+:root{--bg:#9909e7;--card:#7c0aee;--accent:#06b6d4;--muted:#94a3b8;}
+*{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans',sans-serif}
+body{background:linear-gradient(180deg,var(--bg),#05c0cd);color:#e6eef6;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px}
+.card{background:linear-gradient(180deg,rgb(0, 246, 176),rgba(0,0,0,0.2));padding:20px;border-radius:12px;width:360px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+h1{text-align:center;margin:0 0 10px}
+input,button,select{background:transparent;border:1px solid rgb(220, 22, 210);color:inherit;border-radius:8px;padding:8px 10px;width:100%}
+button{cursor:pointer;transition:0.2s}
+button:hover{background:rgba(255,255,255,0.05)}
+.hidden{display:none}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px}
+.cell{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:46px;background:linear-gradient(180deg,rgb(11, 141, 254),rgb(5, 127, 227));border-radius:10px;cursor:pointer;border:2px solid rgba(255,255,255,0.03);user-select:none}
+.cell.winning{background:linear-gradient(90deg,rgba(6,182,212,0.12),rgba(56,189,248,0.06));box-shadow:0 6px 20px rgb(6, 143, 212)}
+.controls{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-bottom:12px}
+.status{text-align:center;color:var(--muted);margin-top:10px}
+.footer{margin-top:8px;font-size:13px;color:var(--muted);text-align:center}
+a{color:var(--accent);cursor:pointer;text-decoration:underline;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="loginCard" class="card">
+  <h1>Login</h1>
+  <input type="text" id="loginUser" placeholder="Username" />
+  <input type="password" id="loginPass" placeholder="Password" style="margin-top:8px;" />
+  <button id="loginBtn">Login</button>
+  <div class="footer">Don't have an account? <a id="toSignup">Sign up</a></div>
+</div>
+
+<!-- SIGNUP SCREEN -->
+<div id="signupCard" class="card hidden">
+  <h1>Sign Up</h1>
+  <input type="text" id="signupUser" placeholder="Choose username" />
+  <input type="password" id="signupPass" placeholder="Choose password" style="margin-top:8px;" />
+  <button id="signupBtn">Sign Up</button>
+  <div class="footer">Already have an account? <a id="toLogin">Login</a></div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="gameCard" class="card hidden">
+  <h1>Tic-Tac-Toe vs AI</h1>
+  <div id="welcome" style="text-align:center;margin-bottom:8px;font-size:14px;"></div>
+
+  <div class="controls">
+    <div>
+      <label>You:</label>
+      <select id="playerMark">
+        <option value="X">X</option>
+        <option value="O">O</option>
+      </select>
+    </div>
+    <div>
+      <label>Difficulty:</label>
+      <select id="difficulty">
+        <option value="hard">Hard (Minimax)</option>
+        <option value="easy">Easy (Random)</option>
+      </select>
+    </div>
+    <button id="restart">Restart</button>
+  </div>
+
+  <div class="board" id="board"></div>
+  <div class="status" id="status">Start playing — pick your mark and click a cell.</div>
+  <div class="footer"><a id="logout">Logout</a></div>
+</div>
+
+<script>
+// ========== LOGIN / SIGNUP LOGIC ==========
+const loginCard = document.getElementById('loginCard');
+const signupCard = document.getElementById('signupCard');
+const gameCard = document.getElementById('gameCard');
+const toSignup = document.getElementById('toSignup');
+const toLogin = document.getElementById('toLogin');
+const loginBtn = document.getElementById('loginBtn');
+const signupBtn = document.getElementById('signupBtn');
+const logout = document.getElementById('logout');
+const welcomeEl = document.getElementById('welcome');
+
+toSignup.onclick = ()=>{ loginCard.classList.add('hidden'); signupCard.classList.remove('hidden'); };
+toLogin.onclick = ()=>{ signupCard.classList.add('hidden'); loginCard.classList.remove('hidden'); };
+
+signupBtn.onclick = ()=>{
+  const user = document.getElementById('signupUser').value.trim();
+  const pass = document.getElementById('signupPass').value.trim();
+  if(!user || !pass) return alert("Please fill all fields");
+  if(localStorage.getItem('user_'+user)) return alert("Username already exists!");
+  localStorage.setItem('user_'+user, pass);
+  alert("Signup successful! You can now log in.");
+  signupCard.classList.add('hidden');
+  loginCard.classList.remove('hidden');
+};
+
+loginBtn.onclick = ()=>{
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value.trim();
+  const savedPass = localStorage.getItem('user_'+user);
+  if(!savedPass) return alert("User not found. Please sign up first!");
+  if(savedPass !== pass) return alert("Incorrect password!");
+  localStorage.setItem('loggedInUser', user);
+  welcomeEl.textContent = "Welcome, " + user + "!";
+  loginCard.classList.add('hidden');
+  gameCard.classList.remove('hidden');
+  init();
+};
+
+logout.onclick = ()=>{
+  localStorage.removeItem('loggedInUser');
+  gameCard.classList.add('hidden');
+  loginCard.classList.remove('hidden');
+};
+
+// ========== GAME LOGIC ==========
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const restartBtn = document.getElementById('restart');
+const playerMarkSelect = document.getElementById('playerMark');
+const difficultySelect = document.getElementById('difficulty');
+
+let board, human, ai, turn, gameOver = false;
+
+function init(){
+  board = Array(9).fill(null);
+  boardEl.innerHTML = '';
+  for(let i=0;i<9;i++){
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.dataset.index = i;
+    c.addEventListener('click', onCellClick);
+    boardEl.appendChild(c);
+  }
+  human = playerMarkSelect.value;
+  ai = human === 'X' ? 'O' : 'X';
+  gameOver = false;
+
+  if(human === 'X'){
+    turn = 'human';
+    statusEl.textContent = 'Your turn (' + human + ')';
+  } else {
+    turn = 'ai';
+    statusEl.textContent = 'AI is thinking...';
+    setTimeout(aiMove, 400);
+  }
+}
+
+function onCellClick(e){
+  if(gameOver || turn !== 'human') return;
+  const idx = Number(e.currentTarget.dataset.index);
+  if(board[idx]) return;
+  makeMove(idx, human);
+  render();
+  const res = checkWinner(board);
+  if(res) return finishGame(res);
+  turn = 'ai';
+  statusEl.textContent = 'AI\'s turn...';
+  setTimeout(aiMove, 300);
+}
+
+function makeMove(idx, mark){ board[idx] = mark; }
+
+function aiMove(){
+  if(gameOver) return;
+  let idx;
+  const diff = difficultySelect.value;
+  if(diff === 'easy'){
+    const empties = board.map((v,i)=> v?null:i).filter(v=>v!==null);
+    idx = empties[Math.floor(Math.random()*empties.length)];
+  } else {
+    const best = minimax(board.slice(), ai);
+    idx = best.index;
+  }
+  makeMove(idx, ai);
+  render();
+  const res = checkWinner(board);
+  if(res) return finishGame(res);
+  turn = 'human';
+  statusEl.textContent = 'Your turn (' + human + ')';
+}
+
+function finishGame(result){
+  gameOver = true;
+  if(result.winner === 'draw'){
+    statusEl.textContent = 'Draw!';
+  } else if(result.winner === human){
+    statusEl.textContent = 'You win! 🎉';
+  } else {
+    statusEl.textContent = 'AI wins!';
+  }
+  if(result.line){
+    result.line.forEach(i=>{
+      const el = boardEl.querySelector('[data-index=\"'+i+'\"]');
+      if(el) el.classList.add('winning');
+    });
+  }
+  setTimeout(init, 2000); // auto restart
+}
+
+function render(){
+  for(let i=0;i<9;i++){
+    const el = boardEl.querySelector('[data-index=\"'+i+'\"]');
+    el.textContent = board[i] || '';
+  }
+}
+
+function checkWinner(b){
+  const lines = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+  for(const ln of lines){
+    const [a,b1,c] = ln;
+    if(b[a] && b[a] === b[b1] && b[a] === b[c]){
+      return {winner: b[a], line: ln};
+    }
+  }
+  if(b.every(x=>x)) return {winner:'draw', line:null};
+  return null;
+}
+
+function minimax(newBoard, player){
+  const avail = newBoard.map((v,i)=> v?null:i).filter(v=>v!==null);
+  const result = checkWinner(newBoard);
+  if(result){
+    if(result.winner === ai) return {score: 10};
+    else if(result.winner === human) return {score: -10};
+    else return {score: 0};
+  }
+  const moves = [];
+  for(const i of avail){
+    const move = {};
+    move.index = i;
+    newBoard[i] = player;
+    const res = minimax(newBoard, player === ai ? human : ai);
+    move.score = res.score;
+    newBoard[i] = null;
+    moves.push(move);
+  }
+  if(player === ai){
+    return moves.reduce((a,b)=> a.score > b.score ? a : b);
+  } else {
+    return moves.reduce((a,b)=> a.score < b.score ? a : b);
+  }
+}
+
+restartBtn.addEventListener('click', init);
+playerMarkSelect.addEventListener('change', init);
+
+// Auto login if user already logged in
+window.onload = ()=>{
+  const loggedUser = localStorage.getItem('loggedInUser');
+  if(loggedUser){
+    welcomeEl.textContent = "Welcome back, " + loggedUser + "!";
+    loginCard.classList.add('hidden');
+    gameCard.classList.remove('hidden');
+    init(); 
+}
+};
+
+
+</script>
+</body>
+</html>
